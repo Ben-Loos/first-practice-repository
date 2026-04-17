@@ -1,0 +1,686 @@
+---
+title: "Homework 4.3"
+author: "Benjamin Loos"
+date: "4/12/2026"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    number-depth: 5
+    fig-align: center
+    cap-location: top
+    geometry: 
+      - top=1in
+      - left=1in
+      - right=1in
+      - bottom=1in
+    colorlinks: true
+execute:
+  echo: false
+  
+editor: visual
+---
+
+## Homework 4.3
+
+the following document contains the answers and information for HW 4.3 in STAT 184 of spring 2026.
+
+first, ill import the necessary libraries for the tables and graphs.
+
+```{r}
+library(rvest)
+library(ggplot2)
+library(dplyr)
+library(scales) 
+library(tidyverse)
+library(tidyr)
+```
+
+## A: Busiest Airports Analysis
+
+I started by taking the url where the airport data was, and stored it into a variable, "page", using read_html.
+
+```{r}
+url<- "https://en.wikipedia.org/wiki/List_of_busiest_airports_by_passenger_traffic"
+page <- read_html(url)
+```
+
+then I put the tables from the url into a variable called "tables".
+
+```{r}
+tables <- page %>%
+  html_nodes(".wikitable")
+```
+
+I will not be using the 2025 or 2026 dataset, so I will use tables to get the 2024 data.
+
+```{r}
+airport_data <- tables %>% 
+  .[[1]] %>%         # extract table 1
+  html_table(fill = TRUE)
+```
+
+The data needs to be clean up before using. It has unnecessary characters in TotalPassengers that need to be removed.
+
+```{r}
+airport_data$Totalpassengers <- airport_data$Totalpassengers %>%
+  str_replace_all(",", "") %>%
+  gsub("\\[.*?\\]", "", .) %>%
+  as.numeric()
+```
+
+This is the clean 2024 ariport data table:
+
+```{r}
+
+#| label: tbl-airports
+#| tbl-cap: "Airports in the dataset"
+
+airport_data
+```
+
+Using ggplot, I turned created a bar-plot comparing the total passengers each airport has.
+
+```{r}
+
+#| label: fig-airportPlot
+#| fig-cap: "Comparison of the number of passengers between the most popular airports"
+#| fig-pos: H
+#| fig-height: 5
+#| fig-alt: "Bar plot showing amount of passengers"
+#| lst-label: lst-figure1
+#| lst-cap: "Code Chunk for Making a airport bar plot"
+
+ggplot(airport_data, aes(x = Airport, y = Totalpassengers)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, size = 4, hjust = 1))
+```
+
+#### analysis
+
+The table of airport passenger totals gives a clear numeric overview of how traffic is distributed across many of the world’s busiest airports, but the bar chart helps reveal the broader pattern in a way the table alone cannot. The chart makes it immediately visible that while a few airports operate at extremely high passenger volumes, most fall into a wide middle range, with substantial variation from airport to airport. Seeing the table and plot together highlights this spread.
+
+## B: Monte Carlo Numerical Integration step
+
+My first step was to create the function as described by homework. The function is a chi-square density.
+
+```{r}
+f <- function(x) {
+  dchisq(x, df = 5)
+}
+```
+
+Then I created the bounds for the sampling. "a" is the min, "b" is the max, and "M" is the slope.
+
+```{r}
+a <- 0
+b <- 20 #bounds
+M <- 0.16
+```
+
+Now for the monte carlo intergration simulation function.
+
+```{r}
+mc_integrate <- function(n) {
+  
+  # random x in [a, b]
+  x <- runif(n, min = a, max = b)
+  
+  # random y in [0, M]
+  y <- runif(n, min = 0, max = M)
+  
+  # points under curve
+  under_curve <- y < f(x)
+  
+  # area of bounding rectangle
+  area_box <- (b - a) * M
+  
+  # Monte Carlo estimat
+  estimate <- mean(under_curve) * area_box
+  
+  tibble(
+    x = x,
+    y = y,
+    under = under_curve,
+    n = n,
+    estimate = estimate
+  )
+}
+```
+
+I created a vector for the different sample sizes.
+
+```{r}
+sizes <- c(10, 100, 1000, 10000)
+```
+Then simulated the data based on the sample sizes:
+```{r}
+sim_data <- map_df(sizes, mc_integrate)
+```
+
+I then used the simulated data to create the estimates of the area under the curve.
+
+```{r}
+estimates <- sim_data %>%
+  group_by(n) %>%
+  summarize(estimate = first(estimate))
+```
+
+this is the table of estimates:
+```{r}
+estimates
+```
+
+Also generated documentation for my monte carlo function:
+```{r}
+prompt(mc_integrate, filename = "mc_integrate.txt")
+```
+
+finally, used ggplot to create 4 graphs of the simulation data:
+```{r}
+ggplot(sim_data, aes(x = x, y = y, color = under)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  scale_color_manual(values = c("FALSE" = "red", "TRUE" = "green")) +
+  geom_function(fun = f, color = "black", linewidth = 1) +
+  facet_wrap(~ n, scales = "free", ncol = 2) +
+  labs(
+    title = "Monte Carlo Numerical Integration at Four Sample Sizes",
+    subtitle = "Points under curve shown in red; points above shown in red",
+    x = "x",
+    y = "y"
+  ) +
+  theme_minimal()
+
+```
+
+### Analysis
+
+The small‑multiple plot makes it clear how increasing the number of Monte Carlo sample points improves the stability and accuracy of the numerical integration of the chi‑square density function. In the panels using small sample sizes (n = 10 and n = 100), the points appear scattered unevenly, and the estimated integral varies widely, showing that randomness dominates when the number of samples is low. As the sample size increases to n = 1000 and especially n = 10,000, the green region under the curve becomes denser and more uniform, and the estimated area converges toward the true integral value.
+
+##C GenAI
+
+### My plan:
+
+step 1: load the dataset.
+
+step 2: rename the columns into something meaningful.
+
+step 3: pivot from wide to long.
+
+step 4: drop missing measurements.
+
+step 5: get the mean of the women's calcium.
+
+step 6: plot the mean trend.
+
+### my promt in Copilot
+
+"step 1: load the dataset."
+```{r}
+
+library(tidyverse)
+
+# Load data; repair duplicate column names automatically
+calcium_wide <- readr::read_csv(
+  "calcium.csv",
+  show_col_types = FALSE,
+  name_repair = "unique"
+)
+
+glimpse(calcium_wide)
+
+```
+
+"step 2: rename the columns into something meaningful."
+```{r}
+
+stopifnot(ncol(calcium_wide) == 8)
+
+names(calcium_wide) <- c(
+  paste0("men_y",   0:3),
+  paste0("women_y", 0:3)
+)
+
+names(calcium_wide)
+
+```
+
+"step 3: pivot from wide to long."
+```{r}
+
+calcium_long <- calcium_wide %>%
+  mutate(id = row_number()) %>%
+  pivot_longer(
+    cols = -id,
+    names_to = c("sex", "time"),
+    names_pattern = "(men|women)_y(\\d+)",
+    values_to = "calcium"
+  ) %>%
+  mutate(
+    time = as.integer(time),
+    sex  = factor(sex, levels = c("men", "women"))
+  )
+
+glimpse(calcium_long)
+
+```
+
+"step 4: drop missing measurements."
+```{r}
+calcium_clean <- calcium_long %>%
+  drop_na(calcium)
+
+# Quick check: how many did we drop?
+calcium_long %>% summarise(missing = sum(is.na(calcium)))
+
+```
+
+"step 5: get the mean of the women's calcium."
+```{r}
+
+women_means <- calcium_clean %>%
+  filter(sex == "women") %>%
+  group_by(time) %>%
+  summarise(
+    n = n(),
+    mean_calcium = mean(calcium),
+    sd = sd(calcium),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+
+women_means
+
+```
+
+"step 6: plot the mean trend."
+```{r}
+
+p <- ggplot(women_means, aes(x = time, y = mean_calcium)) +
+  geom_line(linewidth = 1, color = "#1f77b4") +
+  geom_point(size = 2.5, color = "#1f77b4") +
+  geom_errorbar(aes(ymin = mean_calcium - se, ymax = mean_calcium + se),
+                width = 0.15, alpha = 0.7) +
+  scale_x_continuous(breaks = 0:3, labels = paste0("y", 0:3)) +
+  labs(
+    title = "Women’s Mean Calcium Over Time",
+    x = "Time",
+    y = "Mean calcium"
+  ) +
+  theme_minimal()
+
+p
+
+```
+
+### general prompt with Copilot
+
+Prompt: "make a plot/graph with the data"
+
+Generated:
+
+```{R}
+#| eval: false
+import numpy as np, matplotlib.pyplot as plt
+
+# Prepare arrays
+fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
+
+# --- Plot 1: Boxplots by time + group ---
+ax = axes[0]
+positions = []
+box_data = []
+labels = []
+base = np.arange(len(time_order))
+offset = 0.18
+width = 0.28
+
+for i, t in enumerate(time_order):
+    a_vals = long[(long.group=='A') & (long.time==t)]['value'].dropna().values
+    b_vals = long[(long.group=='B') & (long.time==t)]['value'].dropna().values
+    box_data.extend([a_vals, b_vals])
+    positions.extend([i - offset, i + offset])
+
+bp = ax.boxplot(box_data, positions=positions, widths=width, patch_artist=True, showfliers=False)
+
+# Color boxes alternating A/B
+colors = ['#4C78A8', '#F58518'] * len(time_order)
+for patch, c in zip(bp['boxes'], colors):
+    patch.set_facecolor(c)
+    patch.set_alpha(0.6)
+
+# median lines
+for med in bp['medians']:
+    med.set_color('black')
+
+# x-axis ticks at base positions
+ax.set_xticks(base)
+ax.set_xticklabels(time_order)
+ax.set_xlabel('Time point')
+ax.set_ylabel('Value')
+ax.set_title('Distribution by time point (Groups A vs B)')
+
+# Legend proxies
+from matplotlib.patches import Patch
+ax.legend(handles=[Patch(facecolor='#4C78A8', alpha=0.6, label='Group A'),
+                   Patch(facecolor='#F58518', alpha=0.6, label='Group B')],
+          frameon=False, loc='best')
+
+# --- Plot 2: Means ± SEM ---
+ax2 = axes[1]
+for grp, color in [('A','#4C78A8'), ('B','#F58518')]:
+    sub = summary[summary.group==grp].set_index('time').loc[time_order]
+    x = np.arange(len(time_order))
+    ax2.errorbar(x, sub['mean'].values, yerr=sub['sem'].values, marker='o', capsize=4,
+                 color=color, label=f'Group {grp}')
+
+ax2.set_xticks(x)
+ax2.set_xticklabels(time_order)
+ax2.set_xlabel('Time point')
+ax2.set_ylabel('Mean value (± SEM)')
+ax2.set_title('Mean trend over time')
+ax2.legend(frameon=False, loc='best')
+
+# Overall title
+fig.suptitle('Calcium dataset overview', y=1.02, fontsize=12)
+
+out_path = 'calcium_plots.png'
+fig.savefig(out_path, dpi=200, bbox_inches='tight')
+out_path
+
+
+```
+
+### comparison
+
+The biggest difference I see is that the general prompt is written entirely in python. It also uses forloops a lot.I honeslty can't see any other differences because i can't understand the python code.
+
+## Reflection
+
+In this course, I have learned a lot. I've learned the basic function in r, like mutate, sum, pivot_long. I've learned how to scrap data from websites, like the armed forces branch and rank. I've learned how to tidy and wrangle data into something usable. I've also learned what makes graphs and plots more readable/less-readble. I've learned that data scientists have to be responsible for the results they produce from their data.
+
+\{\{< pagebreak >\}\}  
+# Copilot Apendix
+```{r}
+#| label: GenAIAppend
+#| ref-label: !expr knitr::all_labels()
+#| echo: true
+#| eval: false
+
+### Tool used
+Microsoft Copilot (M365 Copilot / Copilot chat)
+
+### Purpose of use
+to generate a reponse specified by the homework
+
+
+### What Copilot did *not* do
+Copilot did not independently run code, access my private files, or submit work on my behalf.Copilot did not replace required reasoning steps; I remained responsible for final results.
+
+### Prompt / interaction log
+Prompt: "step 1: load the dataset.
+
+step 2: rename the columns into something meaningful.
+
+step 3: pivot from wide to long.
+
+step 4: drop missing measurements.
+
+step 5: get the mean of the women's calcium.
+
+step 6: plot the mean trend."
+
+Generated{
+  library(tidyverse)
+
+# Load data; repair duplicate column names automatically
+calcium_wide <- readr::read_csv(
+  "calcium.csv",
+  show_col_types = FALSE,
+  name_repair = "unique"
+)
+
+glimpse(calcium_wide)
+  
+  stopifnot(ncol(calcium_wide) == 8)
+
+names(calcium_wide) <- c(
+  paste0("men_y",   0:3),
+  paste0("women_y", 0:3)
+)
+
+names(calcium_wide)
+
+calcium_long <- calcium_wide %>%
+  mutate(id = row_number()) %>%
+  pivot_longer(
+    cols = -id,
+    names_to = c("sex", "time"),
+    names_pattern = "(men|women)_y(\\d+)",
+    values_to = "calcium"
+  ) %>%
+  mutate(
+    time = as.integer(time),
+    sex  = factor(sex, levels = c("men", "women"))
+  )
+
+glimpse(calcium_long)
+
+calcium_clean <- calcium_long %>%
+  drop_na(calcium)
+
+# Quick check: how many did we drop?
+calcium_long %>% summarise(missing = sum(is.na(calcium)))
+
+
+women_means <- calcium_clean %>%
+  filter(sex == "women") %>%
+  group_by(time) %>%
+  summarise(
+    n = n(),
+    mean_calcium = mean(calcium),
+    sd = sd(calcium),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+
+women_means
+
+p <- ggplot(women_means, aes(x = time, y = mean_calcium)) +
+  geom_line(linewidth = 1, color = "#1f77b4") +
+  geom_point(size = 2.5, color = "#1f77b4") +
+  geom_errorbar(aes(ymin = mean_calcium - se, ymax = mean_calcium + se),
+                width = 0.15, alpha = 0.7) +
+  scale_x_continuous(breaks = 0:3, labels = paste0("y", 0:3)) +
+  labs(
+    title = "Women’s Mean Calcium Over Time",
+    x = "Time",
+    y = "Mean calcium"
+  ) +
+  theme_minimal()
+
+p
+}
+
+
+Prompt: "make a plot/graph with the data"
+
+Generated{
+import numpy as np, matplotlib.pyplot as plt
+
+# Prepare arrays
+fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
+
+# --- Plot 1: Boxplots by time + group ---
+ax = axes[0]
+positions = []
+box_data = []
+labels = []
+base = np.arange(len(time_order))
+offset = 0.18
+width = 0.28
+
+for i, t in enumerate(time_order):
+    a_vals = long[(long.group=='A') & (long.time==t)]['value'].dropna().values
+    b_vals = long[(long.group=='B') & (long.time==t)]['value'].dropna().values
+    box_data.extend([a_vals, b_vals])
+    positions.extend([i - offset, i + offset])
+
+bp = ax.boxplot(box_data, positions=positions, widths=width, patch_artist=True, showfliers=False)
+
+# Color boxes alternating A/B
+colors = ['#4C78A8', '#F58518'] * len(time_order)
+for patch, c in zip(bp['boxes'], colors):
+    patch.set_facecolor(c)
+    patch.set_alpha(0.6)
+
+# median lines
+for med in bp['medians']:
+    med.set_color('black')
+
+# x-axis ticks at base positions
+ax.set_xticks(base)
+ax.set_xticklabels(time_order)
+ax.set_xlabel('Time point')
+ax.set_ylabel('Value')
+ax.set_title('Distribution by time point (Groups A vs B)')
+
+# Legend proxies
+from matplotlib.patches import Patch
+ax.legend(handles=[Patch(facecolor='#4C78A8', alpha=0.6, label='Group A'),
+                   Patch(facecolor='#F58518', alpha=0.6, label='Group B')],
+          frameon=False, loc='best')
+
+# --- Plot 2: Means ± SEM ---
+ax2 = axes[1]
+for grp, color in [('A','#4C78A8'), ('B','#F58518')]:
+    sub = summary[summary.group==grp].set_index('time').loc[time_order]
+    x = np.arange(len(time_order))
+    ax2.errorbar(x, sub['mean'].values, yerr=sub['sem'].values, marker='o', capsize=4,
+                 color=color, label=f'Group {grp}')
+
+ax2.set_xticks(x)
+ax2.set_xticklabels(time_order)
+ax2.set_xlabel('Time point')
+ax2.set_ylabel('Mean value (± SEM)')
+ax2.set_title('Mean trend over time')
+ax2.legend(frameon=False, loc='best')
+
+# Overall title
+fig.suptitle('Calcium dataset overview', y=1.02, fontsize=12)
+
+out_path = 'calcium_plots.png'
+fig.savefig(out_path, dpi=200, bbox_inches='tight')
+out_path
+}
+
+
+### Dates used
+April-13-2026
+
+### Notes / limitations
+Copilot suggestions may contain errors or assumptions.
+
+```
+
+# Code Appendix
+```{r}
+#| label: codeAppend
+#| ref-label: !expr knitr::all_labels()
+#| echo: true
+#| eval: false
+
+library(rvest)
+library(ggplot2)
+library(dplyr)
+library(scales) 
+library(tidyverse)
+library(tidyr)
+
+#Part A code:
+url<- "https://en.wikipedia.org/wiki/List_of_busiest_airports_by_passenger_traffic"
+page <- read_html(url)
+
+
+
+tables <- page %>%
+  html_nodes(".wikitable")
+
+
+airport_data <- tables %>% 
+  .[[1]] %>%         # extract table 1
+  html_table(fill = TRUE)
+
+airport_data$Totalpassengers <- airport_data$Totalpassengers %>%
+  str_replace_all(",", "") %>%
+  gsub("\\[.*?\\]", "", .) %>%
+  as.numeric()
+
+ggplot(airport_data, aes(x = Airport, y = Totalpassengers)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+#Part B code:
+
+f <- function(x) {
+  dchisq(x, df = 5)
+}
+a <- 0
+b <- 20 #bounds
+M <- 0.16
+# the Monte Carlo simulation
+mc_integrate <- function(n) {
+  
+  # random x in [a, b]
+  x <- runif(n, min = a, max = b)
+  
+  # random y in [0, M]
+  y <- runif(n, min = 0, max = M)
+  
+  # points under curve
+  under_curve <- y < f(x)
+  
+  # area of bounding rectangle
+  area_box <- (b - a) * M
+  
+  # Monte Carlo estimat
+  estimate <- mean(under_curve) * area_box
+  
+  tibble(
+    x = x,
+    y = y,
+    under = under_curve,
+    n = n,
+    estimate = estimate
+  )
+}
+
+# 4. Run the simulation for four sample sizes
+sizes <- c(10, 100, 1000, 10000)
+
+sim_data <- map_df(sizes, mc_integrate)
+
+# 5. Extract estimates for your write-up
+estimates <- sim_data %>%
+  group_by(n) %>%
+  summarize(estimate = first(estimate))
+
+estimates
+
+prompt(mc_integrate, filename = "mc_integrate.txt")
+
+
+ggplot(sim_data, aes(x = x, y = y, color = under)) +
+  geom_point(size = 1.5, alpha = 0.7) +
+  scale_color_manual(values = c("FALSE" = "red", "TRUE" = "green")) +
+  geom_function(fun = f, color = "black", linewidth = 1) +
+  facet_wrap(~ n, scales = "free", ncol = 2) +
+  labs(
+    title = "Monte Carlo Numerical Integration at Four Sample Sizes",
+    subtitle = "Points under curve shown in blue; points above shown in gray",
+    x = "x",
+    y = "y"
+  ) +
+  theme_minimal()
+
+```
